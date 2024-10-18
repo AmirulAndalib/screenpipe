@@ -135,6 +135,8 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
               onChange={(e) =>
                 handleInputChange(field.name, parseFloat(e.target.value) || 0)
               }
+              onWheel={(e) => e.preventDefault()} // prevent scrolling down breaking stuff
+              step="any"
               autoCorrect="off"
               spellCheck="false"
             />
@@ -197,6 +199,37 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
               value={value}
               onChange={(newValue) => handleInputChange(field.name, newValue)}
               type="window"
+              icon={<Layout className="h-4 w-4" />}
+            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={resetToDefault}
+                    className="h-8 w-8"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Reset to default</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        );
+      case "app":
+        return (
+          <div className="flex items-center space-x-2 w-full">
+            <SqlAutocompleteInput
+              className="w-full"
+              id={field.name}
+              placeholder={`Enter ${field.name}`}
+              value={value}
+              onChange={(newValue) => handleInputChange(field.name, newValue)}
+              type="app"
               icon={<Layout className="h-4 w-4" />}
             />
             <TooltipProvider>

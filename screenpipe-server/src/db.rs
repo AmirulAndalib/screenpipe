@@ -238,6 +238,27 @@ impl DatabaseManager {
 
         Ok(id)
     }
+    pub async fn update_audio_transcription(
+        &self,
+        audio_chunk_id: i64,
+        transcription: &str,
+    ) -> Result<i64, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Insert the full transcription
+        let affected =
+            sqlx::query("UPDATE audio_transcriptions SET transcription = ?1 WHERE id = ?2")
+                .bind(transcription)
+                .bind(audio_chunk_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected();
+
+        // Commit the transaction for the full transcription
+        tx.commit().await?;
+
+        Ok(affected as i64)
+    }
 
     pub async fn insert_video_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;

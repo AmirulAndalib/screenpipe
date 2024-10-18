@@ -110,11 +110,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     let port = store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030);
 
-    let data_dir = store
-        .get("dataDir")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
-
     let disable_audio = store
         .get("disableAudio")
         .and_then(|v| v.as_bool())
@@ -162,6 +157,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let languages = store
+        .get("languages")
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
+
+    let enable_beta = store
+        .get("enableBeta")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -170,12 +175,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if fps != 0.2 {
         args.push("--fps");
         args.push(fps_str.as_str());
-    }
-
-    if data_dir != "default" {
-        args.push("--data-dir");
-        let dir = data_dir.as_str();
-        args.push(dir);
     }
 
     if audio_transcription_engine != "default" {
@@ -194,6 +193,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         for monitor in &monitor_ids {
             args.push("--monitor-id");
             args.push(monitor.as_str().unwrap());
+        }
+    }
+
+    if !languages.is_empty() && languages[0] != Value::String("default".to_string()) {
+        for language in &languages {
+            args.push("--language");
+            args.push(language.as_str().unwrap());
         }
     }
 
@@ -254,9 +260,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--disable-telemetry");
     }
 
+    if enable_beta {
+        args.push("--enable-beta");
+    }
 
 
-    // args.push("--debug");
 
     if cfg!(windows) {
         let exe_dir = env::current_exe()
@@ -274,6 +282,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
+
+
 
         let c = c.args(&args);
 

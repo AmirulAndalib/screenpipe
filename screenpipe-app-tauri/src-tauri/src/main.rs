@@ -35,6 +35,7 @@ mod analytics;
 use crate::analytics::start_analytics;
 
 mod commands;
+mod llm_sidecar;
 mod server;
 mod sidecar;
 mod updates;
@@ -115,7 +116,9 @@ async fn main() {
             open_screen_capture_preferences,
             load_pipe_config,
             save_pipe_config,
-            reset_all_pipes
+            reset_all_pipes,
+            llm_sidecar::start_ollama_sidecar,
+            llm_sidecar::stop_ollama_sidecar,
         ])
         .setup(|app| {
             // Logging setup
@@ -138,31 +141,8 @@ async fn main() {
                 .with_writer(std::io::stdout)
                 .with_filter(EnvFilter::new("debug"));
 
-            // Initialize OpenTelemetry
-            // let tracer = opentelemetry_otlp::new_pipeline()
-            //     .tracing()
-            //     .with_exporter(
-            //         opentelemetry_otlp::new_exporter()
-            //             .http()
-            //             .with_endpoint("https://otel.highlight.io/v1/traces")
-            //     )
-            //     .with_trace_config(
-            //         trace::config()
-            //             .with_sampler(Sampler::AlwaysOn)
-            //             .with_resource(Resource::new(vec![opentelemetry::KeyValue::new(
-            //                 "service.name",
-            //                 "screenpipe-app",
-            //             )]))
-            //     )
-            //     .install_batch(opentelemetry::runtime::Tokio)
-            //     .expect("Failed to initialize OpenTelemetry tracer");
-
-            // // Create a tracing layer with the configured tracer
-            // let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-
             // Initialize the tracing subscriber with both layers
             tracing_subscriber::registry()
-                // .with(telemetry)
                 .with(file_layer)
                 .with(console_layer)
                 .init();
@@ -225,7 +205,8 @@ async fn main() {
                     }
                     "update_now" => {
                         use tauri_plugin_notification::NotificationExt;
-                        app_handle.notification()
+                        app_handle
+                            .notification()
                             .builder()
                             .title("screenpipe")
                             .body("installing latest version")
@@ -234,6 +215,8 @@ async fn main() {
 
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
+                                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
+                                // bad UX: i use CLI and it kills my CLI because i updated app
                                 if let Err(err) = sidecar::kill_all_sreenpipes(
                                     app_handle.state::<SidecarState>(),
                                     app_handle.clone(),
@@ -302,7 +285,12 @@ async fn main() {
                 });
 
             if is_analytics_enabled {
-                match start_analytics(unique_id, posthog_api_key, interval_hours, "http://localhost:3030".to_string()) {
+                match start_analytics(
+                    unique_id,
+                    posthog_api_key,
+                    interval_hours,
+                    "http://localhost:3030".to_string(),
+                ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
                     }
@@ -319,12 +307,29 @@ async fn main() {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
+            // if first time user do t start sidecar yet
+            let mut is_first_time_user = store
+                .get("isFirstTimeUser")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+
+            // double-check if they have any files in the data dir
+            let data_dir =
+                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+            let has_files = fs::read_dir(data_dir.join("data"))
+                .map(|mut entries| entries.next().is_some())
+                .unwrap_or(false);
+
+            if has_files {
+                is_first_time_user = false;
+            }
+
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
 
-            if !use_dev_mode {
+            if !use_dev_mode && !is_first_time_user {
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager.lock().await;
                     if let Err(e) = manager.spawn(&app_handle).await {

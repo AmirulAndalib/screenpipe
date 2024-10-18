@@ -135,8 +135,51 @@
         }
       ]
     },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "screenpipe",
+          "cmd": "screenpipe",
+          "args": [
+            "setup"
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "ollama",
+          "cmd": "ollama",
+          "args": [
+            "serve"
+          ],
+          "sidecar": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "ollama-run",
+          "cmd": "ollama",
+          "args": [
+            "run",
+            {
+              "validator": "\\S*"
+            }
+          ],
+          "sidecar": true
+        }
+      ]
+    },
     "cli:default",
     "shell:default",
+    "shell:allow-spawn",
     "dialog:default",
     "updater:default",
     "os:default",
