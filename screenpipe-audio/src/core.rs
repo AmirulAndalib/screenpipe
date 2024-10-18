@@ -16,6 +16,7 @@ pub enum AudioTranscriptionEngine {
     WhisperTiny,
     WhisperDistilLargeV3,
     WhisperLargeV3Turbo,
+    WhisperLargeV3,
 }
 
 impl fmt::Display for AudioTranscriptionEngine {
@@ -25,6 +26,7 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::WhisperTiny => write!(f, "WhisperTiny"),
             AudioTranscriptionEngine::WhisperDistilLargeV3 => write!(f, "WhisperLarge"),
             AudioTranscriptionEngine::WhisperLargeV3Turbo => write!(f, "WhisperLargeV3Turbo"),
+            AudioTranscriptionEngine::WhisperLargeV3 => write!(f, "WhisperLargeV3"),
         }
     }
 }
@@ -338,6 +340,8 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
         #[cfg(not(target_os = "macos"))]
         {
+            // Avoid "unused variable" warning in non-macOS systems
+            let _ = name;
             true
         }
     }
@@ -413,4 +417,28 @@ pub fn default_output_device() -> Result<AudioDevice> {
             .ok_or_else(|| anyhow!("No default output device found"))?;
         return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
+}
+
+pub fn trigger_audio_permission() -> Result<()> {
+    let host = cpal::default_host();
+    let device = host
+        .default_input_device()
+        .ok_or_else(|| anyhow!("No default input device found"))?;
+
+    let config = device.default_input_config()?;
+
+    // Attempt to build an input stream, which should trigger the permission request
+    let _stream = device.build_input_stream(
+        &config.into(),
+        |_data: &[f32], _: &cpal::InputCallbackInfo| {
+            // Do nothing, we just want to trigger the permission request
+        },
+        |err| eprintln!("Error in audio stream: {}", err),
+        None,
+    )?;
+
+    // We don't actually need to start the stream
+    // The mere attempt to build it should trigger the permission request
+
+    Ok(())
 }

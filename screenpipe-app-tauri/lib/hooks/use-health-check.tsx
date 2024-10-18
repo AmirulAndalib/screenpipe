@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface HealthCheckResponse {
   status: string;
@@ -12,46 +12,58 @@ interface HealthCheckResponse {
 
 export function useHealthCheck() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
+  const [isServerDown, setIsServerDown] = useState(false);
+  const baseCheckInterval = 5000; // 5 seconds
+  const maxCheckInterval = 60000; // 1 minute
+  const [restartKey, setRestartKey] = useState(0);
 
-  const fetchHealth = async () => {
+  const fetchHealth = useCallback(async () => {
     try {
       const response = await fetch("http://localhost:3030/health");
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} ${text}`);
+        throw new Error(`http error! status: ${response.status}`);
       }
       const data: HealthCheckResponse = await response.json();
       if (
-        (health !== null && health.status === data.status) ||
-        // did not change
-        (health != null &&
-          health.status_code === data.status_code &&
-          health.message === data.message)
+        !health ||
+        health.status !== data.status ||
+        health.status_code !== data.status_code ||
+        health.message !== data.message
       ) {
-        return;
+        setHealth(data);
       }
-      // console.log("setting health", data);
-      setHealth(data);
+      setIsServerDown(false);
     } catch (error) {
-      // console.error("Failed to fetch health status:", error);
-      setHealth({
-        last_frame_timestamp: null,
-        last_audio_timestamp: null,
-        frame_status: "error",
-        audio_status: "error",
-        status: "error",
-        status_code: 500,
-        message: "failed to fetch health status. server might be down.",
-      });
+      if (!isServerDown) {
+        setIsServerDown(true);
+        setHealth({
+          last_frame_timestamp: null,
+          last_audio_timestamp: null,
+          frame_status: "error",
+          audio_status: "error",
+          status: "error",
+          status_code: 500,
+          message: "failed to fetch health status. server might be down.",
+        });
+      }
     }
-  };
+  }, [health, isServerDown]);
+
+  const forceRestartHealthCheck = useCallback(() => {
+    setRestartKey((prevKey) => prevKey + 1);
+  }, []);
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 1000); // Poll every 1 second
+    const interval = setInterval(
+      () => {
+        fetchHealth();
+      },
+      isServerDown ? maxCheckInterval : baseCheckInterval
+    );
 
     return () => clearInterval(interval);
-  }, []);
+  }, [isServerDown, fetchHealth, restartKey]);
 
-  return { health };
+  return { health, isServerDown, forceRestartHealthCheck };
 }

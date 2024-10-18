@@ -1,7 +1,6 @@
 use std::{
-    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env
+    collections::HashMap, fs, io, net::SocketAddr, ops::Deref, path::PathBuf, sync::{atomic::AtomicBool, Arc}, time::Duration, env, io::Write
 };
-use std::io::Write;
 
 use clap::Parser;
 #[allow(unused_imports)]
@@ -9,23 +8,22 @@ use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::{pin_mut, stream::FuturesUnordered, StreamExt};
-use highlightio::Highlight;
-use log::{debug, error, info};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice, DeviceControl,
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device, AudioDevice, DeviceControl
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, logs::SingleFileRollingWriter, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, PipeCommand}, start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde_json::{json, Value};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
+use tracing::{info, debug, error};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_appender::non_blocking::WorkerGuard;
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -47,71 +45,38 @@ const DISPLAY: &str = r"
 
 ";
 
-fn get_base_dir(custom_path: Option<String>) -> anyhow::Result<PathBuf> {
+fn get_base_dir(custom_path: &Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = home_dir()
         .ok_or_else(|| anyhow::anyhow!("failed to get home directory"))?
         .join(".screenpipe");
 
-    let base_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
+    let base_dir = custom_path.as_ref().map(PathBuf::from).unwrap_or(default_path);
     let data_dir = base_dir.join("data");
 
     fs::create_dir_all(&data_dir)?;
     Ok(base_dir)
 }
 
+fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGuard> {
+    let file_appender = RollingFileAppender::builder()
+        .rotation(Rotation::DAILY)
+        .filename_prefix("screenpipe")
+        .filename_suffix("log")
+        .max_log_files(5)
+        .build(local_data_dir)?;
 
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    debug!("starting screenpipe server");
-    let cli = Cli::parse();
-    let local_data_dir = get_base_dir(cli.data_dir)?;
-    let local_data_dir_clone = local_data_dir.clone();
-
-    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
-
-    if let Some(pipe_command) = cli.command {
-        match pipe_command {
-            Command::Pipe { subcommand } => {
-                handle_pipe_command(subcommand, &pipe_manager).await?;
-                return Ok(());
-            }
-        }
-    }
-
-    if find_ffmpeg_path().is_none() {
-        eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
-        std::process::exit(1);
-    }
-
-    // Set up file appender
-    let log_file_path = local_data_dir.join("screenpipe.log");
-    let file_writer = SingleFileRollingWriter::new(log_file_path)?;
-
-    // Create a custom layer for file logging
-    let file_layer = fmt::layer()
-        .with_writer(file_writer)
-        .with_ansi(false)
-        .with_filter(EnvFilter::new("info"));
-
-    // Create a custom layer for console logging
-    let console_layer = fmt::layer()
-        .with_writer(std::io::stdout)
-        .with_filter(EnvFilter::new("debug"));
-
-    // Build the EnvFilter
     let env_filter = EnvFilter::from_default_env()
         .add_directive("info".parse().unwrap())
         .add_directive("tokenizers=error".parse().unwrap())
         .add_directive("rusty_tesseract=error".parse().unwrap())
         .add_directive("symphonia=error".parse().unwrap());
 
-    // Add custom log levels for specific modules based on environment variables
     let env_filter = env::var("SCREENPIPE_LOG")
         .unwrap_or_default()
         .split(',')
-        .filter(|s| !s.is_empty()) // Filter out empty strings
+        .filter(|s| !s.is_empty())
         .fold(env_filter, |filter, module_directive| {
             match module_directive.parse() {
                 Ok(directive) => filter.add_directive(directive),
@@ -122,33 +87,92 @@ async fn main() -> anyhow::Result<()> {
             }
         });
 
-    // Usage:
-    //  SCREENPIPE_LOG=screenpipe_audio=debug ./screenpipe
-    //  SCREENPIPE_LOG=screenpipe_audio=debug,screenpipe_vision=trace ./screenpipe
-
     let env_filter = if cli.debug {
         env_filter.add_directive("screenpipe=debug".parse().unwrap())
     } else {
         env_filter
     };
 
-    let mut h: Option<Highlight> = None;
-    if !cli.disable_telemetry {
-        // TODO crashes on init
-        // h = Some(Highlight::init(HighlightConfig {
-        //     project_id: "82688".to_string(),
-        //     logger: Box::new(NopLogger),
-        //     ..Default::default()
-        // }).expect("Failed to initialize Highlight.io"));
-    } 
-    
-    // Initialize tracing without OpenTelemetry if telemetry is disabled
     tracing_subscriber::registry()
         .with(env_filter)
-        .with(file_layer)
-        .with(console_layer)
+        .with(fmt::layer().with_writer(std::io::stdout))
+        .with(fmt::layer().with_writer(non_blocking))
         .init();
 
+    info!("logging initialized");
+    Ok(guard)
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+
+    debug!("starting screenpipe server");
+    let cli = Cli::parse();
+
+    let local_data_dir = get_base_dir(&cli.data_dir)?;
+    let local_data_dir_clone = local_data_dir.clone();
+
+    let _log_guard = setup_logging(&local_data_dir, &cli)?;
+
+    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
+
+    if let Some(pipe_command) = cli.command {
+        match pipe_command {
+            Command::Pipe { subcommand } => {
+                handle_pipe_command(subcommand, &pipe_manager).await?;
+                return Ok(());
+            }
+            #[allow(unused_variables)]
+            Command::Setup { enable_beta } => {
+                #[cfg(feature = "beta")]
+                if enable_beta {
+                    use screenpipe_actions::type_and_animate::trigger_keyboard_permission;
+
+                    // Trigger keyboard permission request
+                    if let Err(e) = trigger_keyboard_permission() {
+                        error!("Failed to trigger keyboard permission: {:?}", e);
+                        error!("Please grant keyboard permission manually in System Preferences.");
+                    } else {
+                        info!("Keyboard permission requested. Please grant permission if prompted.");
+                    }
+                }
+                use screenpipe_audio::{trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel};
+                use screenpipe_vision::core::trigger_screen_capture_permission;
+
+                // Trigger audio permission request
+                if let Err(e) = trigger_audio_permission() {
+                    error!("Failed to trigger audio permission: {:?}", e);
+                    error!("Please grant microphone permission manually in System Preferences.");
+                } else {
+                    info!("Audio permission requested. Please grant permission if prompted.");
+                }
+
+                // Trigger screen capture permission request
+                if let Err(e) = trigger_screen_capture_permission() {
+                    error!("Failed to trigger screen capture permission: {:?}", e);
+                    error!("Please grant screen recording permission manually in System Preferences.");
+                } else {
+                    info!("Screen capture permission requested. Please grant permission if prompted.");
+                }
+
+                // this command just download models and stuff (useful to have specific step to display in UI)
+
+                // ! should prob skip if deepgram?
+                WhisperModel::new(&cli.audio_transcription_engine.into()).unwrap();
+                // ! assuming silero is used
+                SileroVad::new().await.unwrap();
+
+                info!("screenpipe setup complete");
+                // TODO: ffmpeg sidecar thing here
+                return Ok(());
+            }
+        }
+    }
+
+    if find_ffmpeg_path().is_none() {
+        eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
+        std::process::exit(1);
+    }
 
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
@@ -268,6 +292,8 @@ async fn main() -> anyhow::Result<()> {
         cli.monitor_id.clone()
     };
 
+    let languages = cli.language.clone();
+
     let ocr_engine_clone = cli.ocr_engine.clone();
     let vad_engine = cli.vad_engine.clone();
     let vad_engine_clone = vad_engine.clone();
@@ -327,6 +353,7 @@ async fn main() -> anyhow::Result<()> {
                     &cli.included_windows,
                     cli.deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
+                    languages.clone(),
                 );
 
                 let result = tokio::select! {
@@ -398,7 +425,7 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌───────────────────┬────────────────────────────────────┐");
+    println!("┌─────────────────────┬────────────────────────────────────┐");
     println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
@@ -462,10 +489,32 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Add languages section
+    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("│ languages           │                                    │");
+    const MAX_ITEMS_TO_DISPLAY: usize = 5;
+
+    if cli.language.is_empty() {
+        println!("│ {:<19} │ {:<34} │", "", "all languages");
+    } else {
+        let total_languages = cli.language.len();
+        for (_, language) in cli.language.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+            let language_str = format!("id: {}", language);
+            let formatted_language = format_cell(&language_str, VALUE_WIDTH);
+            println!("│ {:<19} │ {:<34} │", "", formatted_language);
+        }
+        if total_languages > MAX_ITEMS_TO_DISPLAY {
+            println!(
+                "│ {:<19} │ {:<34} │",
+                "",
+                format!("... and {} more", total_languages - MAX_ITEMS_TO_DISPLAY)
+            );
+        }
+    }
+
     // Add monitors section
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ monitors            │                                    │");
-    const MAX_ITEMS_TO_DISPLAY: usize = 5;
 
     if cli.disable_vision {
         println!("│ {:<19} │ {:<34} │", "", "vision disabled");
@@ -553,7 +602,7 @@ async fn main() -> anyhow::Result<()> {
         println!(
             "{}",
             "you are using local processing. all your data stays on your computer.\n"
-                .bright_yellow()
+                .bright_green()
         );
     }
 
@@ -607,6 +656,8 @@ async fn main() -> anyhow::Result<()> {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
+            // sleep for 5 seconds 
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("watched pid {} has stopped, initiating shutdown", pid);
                 let _ = shutdown_tx_clone.send(());
@@ -616,6 +667,32 @@ async fn main() -> anyhow::Result<()> {
 
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
+
+    // only in beta and on macos
+    #[cfg(feature = "beta")]
+    {
+        if cli.enable_beta && cfg!(target_os = "macos") {
+            use screenpipe_actions::run;
+
+            info!("beta feature enabled, starting screenpipe actions");
+
+            let shutdown_tx_clone = shutdown_tx.clone();
+            tokio::spawn(async move {
+                let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                
+                tokio::select! {
+                    result = run() => {
+                        if let Err(e) = result {
+                            error!("Error running screenpipe actions: {}", e);
+                        }
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("Received shutdown signal, stopping screenpipe actions");
+                    }
+                }
+            });
+        }
+    }
 
     tokio::select! {
         _ = handle => info!("recording completed"),
@@ -635,10 +712,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     info!("shutdown complete");
-
-    if let Some(h) = h {
-        h.shutdown();
-    }
 
     Ok(())
 }

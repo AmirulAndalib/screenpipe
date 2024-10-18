@@ -49,6 +49,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { LogFileButton } from "./screenpipe-status";
 
 export interface Pipe {
   enabled: boolean;
@@ -65,6 +66,12 @@ interface CorePipe {
 }
 
 const corePipes: CorePipe[] = [
+  {
+    id: "pipe-post-questions-on-reddit",
+    description:
+      "get more followers, promote your content/product while being useful, without doing any work",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/examples/typescript/pipe-post-questions-on-reddit",
+  },
   {
     id: "pipe-meeting-summary-by-email",
     description:
@@ -403,7 +410,7 @@ const PipeDialog: React.FC = () => {
 
           {selectedPipe.source?.startsWith("http") && (
             <Button
-              onClick={() => openUrl(selectedPipe.source, "_blank")}
+              onClick={() => openUrl(selectedPipe.source)}
               variant="outline"
             >
               <ExternalLink className="mr-2 h-4 w-4" />
@@ -421,12 +428,13 @@ const PipeDialog: React.FC = () => {
             <Heart className="mr-2 h-4 w-4" />
             support us
           </Button>
+          <LogFileButton />
         </div>
         <Separator className="my-4" />
 
         {selectedPipe.enabled && (
           <>
-            <Collapsible
+            {/* <Collapsible
               open={isLogOpen}
               onOpenChange={setIsLogOpen}
               className="w-full mt-4"
@@ -441,7 +449,7 @@ const PipeDialog: React.FC = () => {
                 <LogViewer className="mt-2" />
               </CollapsibleContent>
             </Collapsible>
-            <Separator className="my-4" />
+            <Separator className="my-4" /> */}
 
             <PipeConfigForm
               pipe={selectedPipe}
@@ -485,6 +493,7 @@ const PipeDialog: React.FC = () => {
                   );
                 },
                 a({ href, children }) {
+                  console.log("Processing link:", href);
                   const isDirectVideo =
                     href?.match(/\.(mp4|webm|ogg)$/) ||
                     href?.includes("user-attachments/assets");
@@ -492,16 +501,16 @@ const PipeDialog: React.FC = () => {
                     /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
                   );
 
+                  console.log("Is direct video:", isDirectVideo);
+                  console.log("Is YouTube video:", !!youtubeMatch);
+
                   if (isDirectVideo) {
                     return (
-                      <video
+                      <RetryableVideo
                         src={href}
-                        controls
-                        className="max-w-full h-auto"
-                        style={{ maxHeight: "400px" }}
-                      >
-                        your browser does not support the video tag.
-                      </video>
+                        maxRetries={3}
+                        retryDelay={1000}
+                      />
                     );
                   } else if (youtubeMatch) {
                     const videoId = youtubeMatch[1];
@@ -519,6 +528,10 @@ const PipeDialog: React.FC = () => {
                     );
                   }
 
+                  // If it's not recognized as a video, log this info
+                  console.log(
+                    "Link not recognized as video, rendering as normal link"
+                  );
                   return (
                     <a href={href} target="_blank" rel="noopener noreferrer">
                       {children}
@@ -704,10 +717,7 @@ const PipeDialog: React.FC = () => {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    onClick={handleResetAllPipes}
-                  >
+                  <Button size="sm" onClick={handleResetAllPipes}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     reset all pipes
                   </Button>
@@ -747,3 +757,42 @@ const PipeDialog: React.FC = () => {
 };
 
 export default PipeDialog;
+
+// Add this new component
+const RetryableVideo = ({
+  src,
+  maxRetries = 3,
+  retryDelay = 1000,
+}: {
+  src?: string;
+  maxRetries?: number;
+  retryDelay?: number;
+}) => {
+  const [retries, setRetries] = useState(0);
+  const [key, setKey] = useState(0);
+
+  const handleError = (e: any) => {
+    console.error("Video loading error:", e);
+    if (retries < maxRetries) {
+      setTimeout(() => {
+        setRetries(retries + 1);
+        setKey(key + 1); // This forces a re-render of the video element
+      }, retryDelay);
+    }
+  };
+
+  return (
+    <video
+      key={key}
+      src={src}
+      controls
+      className="max-w-full h-auto"
+      style={{ maxHeight: "400px" }}
+      onError={handleError}
+      onLoadStart={() => console.log("Video load started:", src)}
+      onLoadedData={() => console.log("Video data loaded:", src)}
+    >
+      your browser does not support the video tag.
+    </video>
+  );
+};

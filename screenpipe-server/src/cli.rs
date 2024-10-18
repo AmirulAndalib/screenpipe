@@ -3,6 +3,7 @@ use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as C
 use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
 use clap::ValueEnum;
 use screenpipe_audio::vad_engine::VadEngineEnum;
+use screenpipe_core::Language;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
@@ -144,7 +145,7 @@ pub struct Cli {
     /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
     /// WhisperDistilLargeV3 is a local, lightweight transcription model (-a whisper-large), recommended for higher quality audio than tiny.
     /// WhisperLargeV3Turbo is a local, lightweight transcription model (-a whisper-large-v3-turbo), recommended for higher quality audio than tiny.
-    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperDistilLargeV3)]
+    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperLargeV3Turbo)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// OCR engine to use.
@@ -177,6 +178,9 @@ pub struct Cli {
     /// Monitor IDs to use, these will be used to select the monitors to record
     #[arg(short = 'm', long)]
     pub monitor_id: Vec<u32>,
+
+    #[arg(short = 'l', long, value_enum)]
+    pub language: Vec<Language>,
 
     /// Enable PII removal from OCR text property that is saved to db and returned in search results
     #[arg(long, default_value_t = false)]
@@ -226,6 +230,11 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_llm: bool,
 
+    /// Enable beta features
+    #[cfg(feature = "beta")]
+    #[arg(long, default_value_t = false)]
+    pub enable_beta: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 
@@ -238,7 +247,13 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
-    // ... (other top-level commands if any)
+    /// Setup screenpipe environment
+    Setup {
+        /// Enable beta features
+        // #[cfg(feature = "beta")] // ! TODO
+        #[arg(long, default_value_t = false)]
+        enable_beta: bool,
+    },
 }
 
 
