@@ -200,7 +200,6 @@ impl ResourceMonitor {
     }
 
     pub fn start_monitoring(self: &Arc<Self>, interval: Duration) {
-        // Clone the Arc since we need to move it into the spawned task
         let monitor = Arc::clone(self);
 
         tokio::spawn(async move {
@@ -211,6 +210,7 @@ impl ResourceMonitor {
                     _ = tokio::time::sleep(interval) => {
                         sys.refresh_all();
                         monitor.log_status(&sys).await;
+
                     }
                 }
             }

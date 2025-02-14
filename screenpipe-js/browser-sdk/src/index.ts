@@ -12,6 +12,7 @@ import type {
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
+import { PipesManager } from "../../common/PipesManager";
 
 const WS_URL = "ws://localhost:3030/ws/events";
 
@@ -78,6 +79,16 @@ export interface BrowserPipe {
     press: (key: string) => Promise<boolean>;
     moveMouse: (x: number, y: number) => Promise<boolean>;
     click: (button: "left" | "right" | "middle") => Promise<boolean>;
+  };
+  pipes: {
+    list: () => Promise<string[]>;
+    download: (url: string) => Promise<boolean>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string }
+    ) => Promise<boolean>;
   };
   streamTranscriptions(): AsyncGenerator<
     TranscriptionStreamResponse,
@@ -182,12 +193,6 @@ class BrowserPipeImpl implements BrowserPipe {
       });
       return true;
     } catch (error) {
-      await this.captureEvent("error_occurred", {
-        feature: "notification",
-        error: "send_failed",
-        distinct_id: userId,
-        email: email,
-      });
       return false;
     }
   }
@@ -240,12 +245,6 @@ class BrowserPipeImpl implements BrowserPipe {
       });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
-      await captureEvent("error_occurred", {
-        feature: "search",
-        error: "query_failed",
-        distinct_id: userId,
-        email: email,
-      });
       console.error("error querying screenpipe:", error);
       return null;
     }
@@ -263,6 +262,97 @@ class BrowserPipeImpl implements BrowserPipe {
       sendInputControl({ type: "MouseMove", data: { x, y } }),
     click: (button: "left" | "right" | "middle") =>
       sendInputControl({ type: "MouseClick", data: button }),
+  };
+
+  pipes: {
+    list: () => Promise<string[]>;
+    download: (url: string) => Promise<boolean>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string }
+    ) => Promise<boolean>;
+  } = {
+    list: async () => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/list", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        const data = await response.json();
+        return data.data;
+      } catch (error) {
+        console.error("failed to list pipes:", error);
+        return [];
+      }
+    },
+    download: async (url: string) => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to download pipe:", error);
+        return false;
+      }
+    },
+    enable: async (pipeId: string) => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/enable", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to enable pipe:", error);
+        return false;
+      }
+    },
+    disable: async (pipeId: string) => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/disable", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to disable pipe:", error);
+        return false;
+      }
+    },
+    update: async (pipeId: string, config: { [key: string]: string }) => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+            config,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to update pipe:", error);
+        return false;
+      }
+    },
   };
 
   async *streamTranscriptions(): AsyncGenerator<
@@ -347,7 +437,9 @@ class BrowserPipeImpl implements BrowserPipe {
 }
 
 const pipeImpl = new BrowserPipeImpl();
+const pipeManager = new PipesManager();
 export const pipe = pipeImpl;
+pipeImpl.pipes = pipeManager;
 
 export * from "../../common/types";
 export { getDefaultSettings } from "../../common/utils";
