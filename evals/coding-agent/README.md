@@ -975,3 +975,20 @@ only when grading begins. These checks do not establish native notification
 display, completed Pipe results, policy authority to start work, multi-window
 concurrency, execution isolation or model performance. The task covers an already
 scheduled follow-up and does not authorize activating paused work.
+
+## Lazy streaming errors
+
+`ai-gateway-lazy-stream-initial-error` exercises the actual OpenAI-compatible
+provider with synthetic SDK iterables and inert telemetry. Initial lazy quota
+and service failures reject before a successful stream is returned. Five nearby
+outcomes preserve SDK creation errors, text, tool fragments and usage, empty
+streams, and SSE errors after partial delivery. The parent fails the two initial
+error outcomes and preserves five; the reference and current provider pass seven.
+
+Run `bun test evals/coding-agent/calibrate-stream-initial-error.test.js` for nine
+controls, including unused correct code, equivalent iterator names, lost or
+repeated first chunks, incorrect later error status and missing-source setup
+classification. No dependencies or build caches are linked by this case. Fixtures
+are materialized at grading time. This does not establish caller fallback
+selection, cancellation, live provider behavior, execution isolation or model
+performance, and does not reinstate historical Argus routing policy.

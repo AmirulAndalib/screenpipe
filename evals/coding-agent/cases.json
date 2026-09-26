@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite": "screenpipe-app-coding-agent-regressions",
-  "dataset_version": "2026-09-26.2",
+  "dataset_version": "2026-09-26.3",
   "suite_type": "regression",
   "owner": "screenpipe engineering",
   "policy": {
@@ -3527,6 +3527,43 @@
           }
         ],
         "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-notification-transport.config.mjs"
+      }
+    },
+    {
+      "id": "ai-gateway-lazy-stream-initial-error",
+      "name": "Expose initial lazy-stream failures before successful stream delivery",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "e8ed10afed8400e943c7ab2cb9c7a18f7b83e5b6",
+        "pull_request": "https://github.com/screenpipe/screenpipe/pull/5840"
+      },
+      "base_ref": "bfaeef6183c6b757f9779b25635d3687466f56e3",
+      "oracle_ref": "e8ed10afed8400e943c7ab2cb9c7a18f7b83e5b6",
+      "oracle_paths": [
+        "packages/ai-gateway/src/providers/openai.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "packages/ai-gateway/src/providers/openai.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "ai-gateway",
+        "streaming",
+        "error-handling"
+      ],
+      "prompt": "An OpenAI-compatible SDK can return a stream successfully and raise its upstream error only when iteration begins. The provider currently turns that initial failure into an already-successful stream, preventing callers from handling it before delivery. Repair the actual OpenAIProvider streaming boundary so initial quota and service-unavailable errors reject before returning a successful stream, preserving their message, status and code. Preserve SDK creation errors as well. Successful streams must deliver the first and later text or tool-call fragments exactly once and in order, preserve tool identity and argument assembly, completion reasons and usage including cached tokens, and end with one [DONE]. Empty upstream streams must complete normally without invented content. After content has begun, later errors must remain SSE errors with original message and numeric status code, network_error completion and [DONE], retaining the partial content. Preserve the input object and outgoing model/messages/stream request. Use synthetic SDK and telemetry ports and no external network. No particular iterator, private helper or priming implementation is required. Caller fallback selection, retired model-routing policy, cancellation, live provider behavior and model quality are outside this task.",
+      "agent_timeout_seconds": 900,
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/gateway-stream-initial-error.test.js",
+            "destination_path": "evals/coding-agent/graders/gateway-stream-initial-error.test.js"
+          }
+        ],
+        "command": "\"${BUN_BIN:-bun}\" test evals/coding-agent/graders/gateway-stream-initial-error.test.js"
       }
     }
   ]
