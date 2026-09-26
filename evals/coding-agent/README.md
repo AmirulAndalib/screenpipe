@@ -939,3 +939,21 @@ from intended behavior failures. Use the shared runner's `--verify` for the case
 ### Background allowance request preservation
 
 `ai-gateway-background-request-preservation` drives the existing chat handler through synthetic provider ports. Thirteen outcomes preserve message roles, context, tool schemas, output budgets, response formats and streamed tool results during enabled allowance recovery, plus successful-primary and refusal behavior. Parent verification fails four intended outcomes and preserves nine; the historical fix passes thirteen. Run `bun test evals/coding-agent/calibrate-background-request.test.js`. Paid-plan HTTP admission, safety-refusal policy, actual provider compatibility, concurrent accounting, execution isolation and model performance remain separate. Fixtures and dependency links are installed only when grading starts.
+
+
+## Unaccepted canvas positions
+
+`app-canvas-preview-persistence` renders the real overview and canvas against
+synthetic native, generation and settings ports. Five outcomes check a fresh
+canvas during proposal review, normal editing, existing annotations, rejection
+and acceptance. The parent fails the unaccepted-position assertion and preserves
+four outcomes; the reference and current component pass all five. Native writes
+are copied at invocation and complete asynchronously; stored effects are checked
+without requiring exact call counts, DOM identity or private names.
+
+Run `bun test evals/coding-agent/calibrate-canvas-outcome.test.js` with desktop
+test dependencies installed. Controls cover unused correct code, blanket write
+suppression, dropped annotations and blocked acceptance; equivalent private names
+and test attributes pass. Missing source is a setup error. Hidden fixtures and
+dependencies are installed only at grading. This does not establish native
+storage, browser geometry, agent isolation or model performance.

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite": "screenpipe-app-coding-agent-regressions",
-  "dataset_version": "2026-09-25.5",
+  "dataset_version": "2026-09-26.1",
   "suite_type": "regression",
   "owner": "screenpipe engineering",
   "policy": {
@@ -3427,6 +3427,53 @@
           }
         ],
         "command": "cd packages/ai-gateway && \"${BUN_BIN:-bun}\" test src/test/eval-background-request.test.ts"
+      }
+    },
+    {
+      "id": "app-canvas-preview-persistence",
+      "name": "Keep unaccepted canvas positions out of saved Live Views",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "d8621a14179173c7eb4df82085d9a209251f4454"
+      },
+      "base_ref": "85ae3c99fc1369b7261667cd5c083730d361ea0e",
+      "oracle_ref": "d8621a14179173c7eb4df82085d9a209251f4454",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/components/settings/brain-overview.tsx"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/components/settings/brain-overview.tsx",
+        "apps/screenpipe-app-tauri/components/settings/live-view-canvas.tsx",
+        "apps/screenpipe-app-tauri/lib/live-views/canvas-layout.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "canvas",
+        "persistence"
+      ],
+      "prompt": "A Live View with no saved canvas yet can preview an AI-proposed new block before the user accepts it. Canvas viewport changes during that review currently send positions for the unaccepted block to native persistence, which rejects them. Keep previews visible, but send and persist canvas positions only for blocks in the saved view until acceptance. Resetting the zoom and then zooming in during review must successfully persist the viewport without a save-error notification. Preserve the saved block positions and correct view ownership. Keep ordinary viewport editing without proposals working. For an existing canvas, preserve stored notes and allow note-text edits during review without saving the proposed block. Rejecting all proposals must leave the saved view and annotations intact, make no view-definition save, and allow later canvas editing. Accepting all proposals must persist the added block, leave annotations intact and allow later canvas edits with the newly accepted block positions. Preserve the public BrainOverview interface and the synthetic native command boundary. Exact save-call counts, DOM identities, test IDs, CSS and private helper names are not prescribed. Use synthetic data and external ports only; do not perform live model calls or native/customer storage operations.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/canvas-outcome.fixture.tsx.txt",
+            "destination_path": "apps/screenpipe-app-tauri/eval-canvas-outcome.test.tsx"
+          },
+          {
+            "local_path": "graders/canvas-outcome.config.mjs",
+            "destination_path": "apps/screenpipe-app-tauri/eval-canvas-outcome.config.mjs"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-canvas-outcome.config.mjs"
       }
     }
   ]
