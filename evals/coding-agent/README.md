@@ -992,3 +992,24 @@ classification. No dependencies or build caches are linked by this case. Fixture
 are materialized at grading time. This does not establish caller fallback
 selection, cancellation, live provider behavior, execution isolation or model
 performance, and does not reinstate historical Argus routing policy.
+
+## Hosted-AI settlement replay
+
+`ai-gateway-settlement-replay-atomicity` exercises the existing `logCost`
+entrypoint against synthetic local workerd D1. Ten outcomes cover concurrent
+replay, independent requests, conflicting cost/ownership, atomic rollback,
+lost commit acknowledgement, zero cost and preserved legacy, unbudgeted and
+speech accounting. The parent fails six intended outcomes and preserves four;
+the reference and current source pass ten.
+
+Run `bun test evals/coding-agent/calibrate-settlement-replay.test.js` with
+Miniflare `3.20250718.3` available in `packages/ai-gateway/node_modules`.
+Ten calibration controls include an unused corrected implementation, blanket
+success, collapsed request identities, ignored cost conflicts and non-atomic
+writes. Equivalent private names pass; missing source is a setup error.
+The case checks account and aggregate effects without requiring a particular
+ledger table or helper design. Fixtures and dependency links appear only at
+grading time; dependency links do not establish agent isolation. Current product
+tests separately cover additional ledger windows. This case does not establish
+HTTP admission, hold release, every budget window, deployed migrations, actual
+provider billing or model performance.

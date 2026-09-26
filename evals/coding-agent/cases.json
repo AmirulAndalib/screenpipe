@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite": "screenpipe-app-coding-agent-regressions",
-  "dataset_version": "2026-09-26.3",
+  "dataset_version": "2026-09-26.4",
   "suite_type": "regression",
   "owner": "screenpipe engineering",
   "policy": {
@@ -3564,6 +3564,49 @@
           }
         ],
         "command": "\"${BUN_BIN:-bun}\" test evals/coding-agent/graders/gateway-stream-initial-error.test.js"
+      }
+    },
+    {
+      "id": "ai-gateway-settlement-replay-atomicity",
+      "name": "Apply replayed hosted-AI settlements once without partial accounting",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "d9ff95802e6566a7b3ea3242800aef59cacb9aa0"
+      },
+      "base_ref": "8b455607ffbaef204a6f6a0a62e973bac6211e48",
+      "oracle_ref": "d9ff95802e6566a7b3ea3242800aef59cacb9aa0",
+      "oracle_paths": [
+        "packages/ai-gateway/src/services/cost-tracker.ts",
+        "packages/ai-gateway/src/services/hosted-ai-settlement-ledger.ts"
+      ],
+      "gate": "advisory",
+      "tags": [
+        "accounting",
+        "retry",
+        "concurrency",
+        "ownership"
+      ],
+      "trigger_paths": [
+        "packages/ai-gateway/src/services/cost-tracker.ts",
+        "packages/ai-gateway/src/services/hosted-ai-settlement-ledger.ts"
+      ],
+      "prompt": "The existing hosted-AI logCost entrypoint can apply the same priced request repeatedly and report success after only part of its accounting succeeds. Repair its budgeted text accounting for calls carrying a stable settlement_id. Sequential or concurrent identical replays must return true and apply the account cost and cost_daily request/cost aggregate exactly once. Different IDs still apply independently. Reusing an applied ID with a different cost or account owner must return false without changing either account or the aggregate. A failed dependent aggregate write must return false with no partial account charge; a later successful retry applies once. If the accounting transaction committed but its acknowledgement was lost, an identical retry must succeed without another charge. Zero-cost replays record one request and no spend. Preserve existing legacy calls without settlement_id: each call still accounts independently. Preserve budgeted:false telemetry-only calls and transcription_budgeted:true calls: they retain their repeated telemetry behavior, with unbudgeted calls not charging accounts and speech calls charging only their existing separate transcription account bucket. Exercise the real logCost entrypoint with synthetic local D1 data, never production services. Any implementation meeting these outcomes is acceptable; do not depend on particular helper names or a particular idempotency-table design. This case does not prove request admission, hold release, all global/background/trial budget windows, deployment activation, or provider billing correctness. Add focused tests for these outcomes.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "packages/ai-gateway/node_modules",
+          "destination_path": "packages/ai-gateway/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/settlement-replay.fixture.ts.txt",
+            "destination_path": "packages/ai-gateway/src/test/eval-settlement-replay.test.ts"
+          }
+        ],
+        "command": "cd packages/ai-gateway && \"${BUN_BIN:-bun}\" test src/test/eval-settlement-replay.test.ts --timeout=10000"
       }
     }
   ]
