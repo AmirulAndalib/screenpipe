@@ -396,21 +396,31 @@ mod tests {
         let target = device.clone();
         let starting_stream = stream.clone();
         let start = tokio::spawn(async move {
-            owner.run_device_operation(&target.clone(), async move {
-                entered_tx.send(()).unwrap();
-                release_rx.await.unwrap();
-                starting.streams.insert(target.clone(), starting_stream);
-                starting.states.insert(target, Arc::new(AtomicBool::new(true)));
-                Ok(())
-            }).await
+            owner
+                .run_device_operation(&target.clone(), async move {
+                    entered_tx.send(()).unwrap();
+                    release_rx.await.unwrap();
+                    starting.streams.insert(target.clone(), starting_stream);
+                    starting
+                        .states
+                        .insert(target, Arc::new(AtomicBool::new(true)));
+                    Ok(())
+                })
+                .await
         });
         entered_rx.await.unwrap();
         let stopping = dm.clone();
         let mut stop = tokio::spawn(async move { stopping.stop_all_devices().await });
-        assert!(tokio::time::timeout(Duration::from_millis(50), &mut stop).await.is_err());
+        assert!(tokio::time::timeout(Duration::from_millis(50), &mut stop)
+            .await
+            .is_err());
         release_tx.send(()).unwrap();
         start.await.unwrap().unwrap();
-        tokio::time::timeout(Duration::from_secs(1), stop).await.unwrap().unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(1), stop)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
         assert!(stream.is_disconnected());
         assert!(dm.stream(&device).is_none());
         assert!(!dm.is_running(&device));

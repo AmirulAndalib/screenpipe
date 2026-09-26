@@ -1196,7 +1196,10 @@ impl AudioManager {
                 .unwrap()
                 .remove(&device.to_string());
             self.stop_device_recording_inner(device).await?;
-            return Err(anyhow!("device {} capture was stopped during startup", device));
+            return Err(anyhow!(
+                "device {} capture was stopped during startup",
+                device
+            ));
         }
 
         // The meeting can end while the backend is opening the stream. Remove
