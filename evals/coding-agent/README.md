@@ -957,3 +957,21 @@ suppression, dropped annotations and blocked acceptance; equivalent private name
 and test attributes pass. Missing source is a setup error. Hidden fixtures and
 dependencies are installed only at grading. This does not establish native
 storage, browser geometry, agent isolation or model performance.
+
+## Onboarding notification transport
+
+`app-onboarding-notification-transport` exercises the existing follow-up
+orchestration, activation storage, time helper and app-control client with
+synthetic native and transport ports. Six outcomes cover runtime-port delivery,
+configuration fallback, refusal followed by retry, replay suppression, failed
+engine dispatch, future deadlines and missing views. It observes the default
+transport rather than injecting a replacement notification helper. The historical
+parent fails three delivery outcomes and preserves three; the reference and
+current source pass all six.
+
+Run `bun test evals/coding-agent/calibrate-notification-transport.test.js` with
+desktop dependencies installed. Fixtures and dependency links are materialized
+only when grading begins. These checks do not establish native notification
+display, completed Pipe results, policy authority to start work, multi-window
+concurrency, execution isolation or model performance. The task covers an already
+scheduled follow-up and does not authorize activating paused work.

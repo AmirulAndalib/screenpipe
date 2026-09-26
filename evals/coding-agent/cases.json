@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite": "screenpipe-app-coding-agent-regressions",
-  "dataset_version": "2026-09-26.1",
+  "dataset_version": "2026-09-26.2",
   "suite_type": "regression",
   "owner": "screenpipe engineering",
   "policy": {
@@ -3474,6 +3474,59 @@
           }
         ],
         "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-canvas-outcome.config.mjs"
+      }
+    },
+    {
+      "id": "app-onboarding-notification-transport",
+      "name": "Deliver onboarding follow-ups through the app-control server",
+      "source": {
+        "kind": "git_regression",
+        "fix_commit": "35caddb4562d3bd15fdb0aa3f7928ce20dfed93c",
+        "pull_request": "https://github.com/screenpipe/screenpipe/pull/5844"
+      },
+      "base_ref": "a7d74fb9adf6c9c286ce9cfa33b2e8c9c62135bc",
+      "oracle_ref": "35caddb4562d3bd15fdb0aa3f7928ce20dfed93c",
+      "oracle_paths": [
+        "apps/screenpipe-app-tauri/lib/live-views/onboarding-follow-up.ts",
+        "apps/screenpipe-app-tauri/lib/notifications/app-server.ts"
+      ],
+      "gate": "advisory",
+      "trigger_paths": [
+        "apps/screenpipe-app-tauri/lib/live-views/onboarding-follow-up.ts",
+        "apps/screenpipe-app-tauri/lib/notifications/app-server.ts"
+      ],
+      "tags": [
+        "regression",
+        "escaped-failure",
+        "notifications",
+        "retry",
+        "transport"
+      ],
+      "prompt": "An already scheduled onboarding follow-up dispatches its permitted dashboard work but never delivers its notification because notification requests go to the recording engine. Repair the existing runDueOnboardingLiveViewFollowUp default transport. Keep Pipe runs on the engine transport, deduplicate shared Pipe bindings, and POST notifications to the app-control server using its native runtime port; use localhost:11435 if native configuration lookup fails. Preserve the notification link to the originating Live View. Persist sent status only after notification acceptance, and suppress later duplicate delivery. A rejected notification must remain scheduled for a later retry that can recover and persist sent status. If all engine dispatches fail, schedule a retry without sending a notification. A future deadline or a missing view must perform no transport work. Use synthetic native configuration, storage and network ports. This task fixes delivery of an existing scheduled follow-up; it does not authorize new scheduling, activation of paused work, claim completed Pipe results, or change notification wording or notification policy. Native display, engine completion, multi-window concurrency, recording and live service behavior are outside scope.",
+      "agent_timeout_seconds": 900,
+      "grader_dependency_links": [
+        {
+          "source_path": "apps/screenpipe-app-tauri/node_modules",
+          "destination_path": "apps/screenpipe-app-tauri/node_modules"
+        }
+      ],
+      "grader": {
+        "timeout_seconds": 60,
+        "fixtures": [
+          {
+            "local_path": "graders/notification-transport.fixture.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/eval-notification-transport.test.ts"
+          },
+          {
+            "local_path": "graders/notification-transport.config.mjs",
+            "destination_path": "apps/screenpipe-app-tauri/eval-notification-transport.config.mjs"
+          },
+          {
+            "local_path": "graders/notification-localization.fixture.ts.txt",
+            "destination_path": "apps/screenpipe-app-tauri/eval-notification-localization.ts"
+          }
+        ],
+        "command": "cd apps/screenpipe-app-tauri && node node_modules/vitest/vitest.mjs run --config eval-notification-transport.config.mjs"
       }
     }
   ]
